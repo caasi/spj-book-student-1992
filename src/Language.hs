@@ -44,8 +44,8 @@ type CoreProgram = Program Name
 type ScDefn a = (Name, [a], Expr a)
 type CoreScDefn = ScDefn Name
 
-preludeDefs :: CoreProgram
-preludeDefs
+preludeDefns :: CoreProgram
+preludeDefns
   = [ ("I", ["x"], EVar "x")
     , ("K", ["x", "y"], EVar "x")
     , ("K1", ["x", "y"], EVar "y")
