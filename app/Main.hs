@@ -7,4 +7,4 @@ import PrettyPrint
 
 main :: IO ()
 main = do
-  putStrLn $ pprint preludeDefns
+  putStrLn $ pprint fooDefns

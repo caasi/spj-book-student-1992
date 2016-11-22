@@ -71,6 +71,8 @@ data Iseq
   = INil
   | IStr String
   | IAppend Iseq Iseq
+  | INewline
+  | IIndent Iseq
 
 iNil     :: Iseq                  -- The empty iseq
 iStr     :: String -> Iseq        -- Turn a string into an iseq
@@ -81,10 +83,12 @@ iDisplay :: Iseq -> String        -- Turn an iseq into a string
 
 iNil = INil
 iStr = IStr
-iAppend = IAppend
-iNewline = iStr "\n"
-iIndent seq = seq
-iDisplay seq = flatten [seq]
+iAppend INil seq = seq
+iAppend seq INil = seq
+iAppend seq1 seq2 = IAppend seq1 seq2
+iNewline = INewline
+iIndent seq = IIndent seq
+iDisplay seq = flatten 0 [(seq, 0)]
 
 iConcat :: [Iseq] -> Iseq
 iConcat = foldl iAppend iNil
@@ -94,8 +98,18 @@ iInterleave _ [] = iNil
 iInterleave _ (s : []) = s
 iInterleave seq (s : ss) = s `iAppend` seq `iAppend` (iInterleave seq ss)
 
-flatten :: [Iseq] -> String
-flatten [] = ""
-flatten (INil : seqs) = flatten seqs
-flatten (IStr s : seqs) = s ++ (flatten seqs)
-flatten (IAppend seq1 seq2 : seqs) = flatten (seq1 : seq2 : seqs)
+flatten :: Int -> [(Iseq, Int)] -> String
+flatten col []
+  = ""
+flatten col ((INil, indent) : seqs)
+  = flatten col seqs
+flatten col ((IStr s, indent) : seqs)
+  = s ++ (flatten (col + length s) seqs)
+flatten col ((IAppend seq1 seq2, indent) : seqs)
+  = flatten col ((seq1, indent) : (seq2, indent) : seqs)
+flatten col ((INewline, indent) : seqs)
+  = '\n' : (spaces indent) ++ flatten indent seqs
+flatten col ((IIndent seq, indent) : seqs)
+  = flatten col ((seq, col) : seqs)
+
+spaces = flip replicate ' '

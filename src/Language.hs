@@ -55,3 +55,16 @@ preludeDefns
                                        (EAp (EVar "g") (EVar "x")))
     , ("twice", ["f"], EAp (EAp (EVar "compose") (EVar "f")) (EVar "f"))
     ]
+
+fooDefns :: CoreProgram
+fooDefns
+  = [ ( "f"
+      , ["n"]
+      , ELet
+          True
+          [ ("bar", EVar "foo")
+          , ("foo", EAp (EVar "bar") (EVar "n"))
+          ]
+          (EVar "bar")
+      )
+    ]
