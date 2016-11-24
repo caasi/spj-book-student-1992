@@ -130,3 +130,20 @@ flatten col ((IIndent seq, indent) : seqs)
   = flatten col ((seq, col) : seqs)
 
 spaces = flip replicate ' '
+
+-- other useful functions
+iNum :: Int -> Iseq
+iNum n = iStr $ show n
+
+iFWNum :: Int -> Int -> Iseq
+iFWNum width n
+  = iStr (spaces (width - length digits) ++ digits)
+    where
+      digits = show n
+
+iLayn :: [Iseq] -> Iseq
+iLayn seqs = iConcat (map lay_item (zip [1..] seqs))
+             where
+               lay_item (n, seq)
+                 = iConcat [ iFWNum 4 n, iStr ") ", iIndent seq, iNewline
+                           ]
