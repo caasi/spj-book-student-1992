@@ -63,7 +63,11 @@ fooDefns
       , ELet
           True
           [ ("bar", EVar "foo")
-          , ("foo", EAp (EVar "bar") (EVar "n"))
+          , ("foo", EAp (EAp (EVar "+") (ENum 2)) (ENum 3))
+          , ("buz", EAp (EAp (EVar "+") (EAp (EAp (EVar "*") (ENum 2)) (ENum 3)) )
+                                        (EAp (EAp (EVar "*") (ENum 2)) (ENum 3)) )
+          , ("boo", EAp (EAp (EVar "*") (EAp (EAp (EVar "+") (ENum 2)) (ENum 3)) )
+                                        (EAp (EAp (EVar "+") (ENum 2)) (ENum 3)) )
           ]
           (EVar "bar")
       )
