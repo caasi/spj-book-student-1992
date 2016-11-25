@@ -6,42 +6,39 @@ import Language
 
 
 type Token = String
+type LineNum = Int
 
 parse :: String -> CoreProgram
-parse = syntax . clex
+parse = syntax . (clex 0)
 
-clex :: String -> [Token]
-clex [] = []
-clex (c : cs)
-  | isWhiteSpace c = clex cs
-clex (c : cs)
-  | isDigit c = num_token : clex rest_cs
+clex :: LineNum -> String -> [(LineNum, Token)]
+clex _ [] = []
+clex lineNum (c : cs)
+  | c == '\n' = clex (lineNum + 1) cs
+clex lineNum (c : cs)
+  | isWhiteSpace c = clex lineNum cs
+clex lineNum (c : cs)
+  | isDigit c = (lineNum, num_token) : clex lineNum rest_cs
                 where
                   num_token = c : takeWhile isDigit cs
                   rest_cs = dropWhile isDigit cs
-clex (c : cs)
-  | isAlpha c = var_tok : clex rest_cs
+clex lineNum (c : cs)
+  | isAlpha c = (lineNum, var_tok) : clex lineNum rest_cs
                 where
                   var_tok = c : takeWhile isIdChar cs
                   rest_cs = dropWhile isIdChar cs
-clex (c : cs)
-  | c == '|' = clex $ chompComment cs
-clex (c : d : cs)
-  | [c, d] `elem` twoCharOps = [c, d] : clex cs
-clex (c : cs)
-  = [c] : clex cs
+clex lineNum (c : d : cs)
+  | [c, d] == "||" = clex (lineNum + 1) $ chompUntilNewline cs
+clex lineNum (c : d : cs)
+  | [c, d] `elem` twoCharOps = (lineNum, [c, d]) : clex lineNum cs
+clex lineNum (c : cs)
+  = (lineNum, [c]) : clex lineNum cs
 
 isIdChar :: Char -> Bool
 isIdChar c = isAlpha c || isDigit c || (c == '_')
 
 isWhiteSpace :: Char -> Bool
-isWhiteSpace c = c `elem` " \t\n"
-
-chompComment :: String -> String
-chompComment [] = []
-chompComment (c : cs)
-  | c == '|'  = chompUntilNewline cs
-  | otherwise = '|' : cs
+isWhiteSpace c = c `elem` " \t"
 
 chompUntilNewline :: String -> String
 chompUntilNewline [] = []
@@ -52,5 +49,5 @@ chompUntilNewline (c : cs)
 twoCharOps :: [String]
 twoCharOps = ["==", "~=", ">=", "<=", "->"]
 
-syntax :: [Token] -> CoreProgram
+syntax :: [(LineNum, Token)] -> CoreProgram
 syntax = undefined

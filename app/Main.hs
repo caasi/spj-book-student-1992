@@ -6,12 +6,16 @@ import Parser
 
 
 
-program0 = "3 + 2 >= 5"
+program = "\
+  \compose = f g -> f . g\n\
+  \let a\n\
+  \  = compose f g\n\
+  \in a\
+\"
+
 program1 = "2 - 1 >="
 program2 = "2 - 1 >"
 
 main :: IO ()
 main = do
-  putStrLn $ show $ clex program0
-  putStrLn $ show $ clex program1
-  putStrLn $ show $ clex program2
+  putStrLn $ show $ clex 0 program
