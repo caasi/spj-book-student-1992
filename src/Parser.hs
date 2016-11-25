@@ -26,6 +26,8 @@ clex (c : cs)
                   rest_cs = dropWhile isIdChar cs
 clex (c : cs)
   | c == '|' = clex $ chompComment cs
+clex (c : d : cs)
+  | [c, d] `elem` twoCharOps = [c, d] : clex cs
 clex (c : cs)
   = [c] : clex cs
 
@@ -36,14 +38,19 @@ isWhiteSpace :: Char -> Bool
 isWhiteSpace c = c `elem` " \t\n"
 
 chompComment :: String -> String
+chompComment [] = []
 chompComment (c : cs)
   | c == '|'  = chompUntilNewline cs
   | otherwise = '|' : cs
 
 chompUntilNewline :: String -> String
+chompUntilNewline [] = []
 chompUntilNewline (c : cs)
   | c == '\n' = cs
   | otherwise = chompUntilNewline cs
+
+twoCharOps :: [String]
+twoCharOps = ["==", "~=", ">=", "<=", "->"]
 
 syntax :: [Token] -> CoreProgram
 syntax = undefined

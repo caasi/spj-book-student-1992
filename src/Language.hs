@@ -59,19 +59,3 @@ preludeDefns
     , ("twice", ["f"], EAp (EAp (EVar "compose") (EVar "f")) (EVar "f"))
     ]
 
-fooDefns :: CoreProgram
-fooDefns
-  = [ ( "f"
-      , ["n"]
-      , ELet
-          True
-          [ ("bar", EVar "foo")
-          , ("foo", EAp (EAp (EVar "+") (ENum 2)) (ENum 3))
-          , ("buz", EAp (EAp (EVar "+") (EAp (EAp (EVar "*") (ENum 2)) (ENum 3)) )
-                                        (EAp (EAp (EVar "*") (ENum 2)) (ENum 3)) )
-          , ("boo", EAp (EAp (EVar "*") (EAp (EAp (EVar "+") (ENum 2)) (ENum 3)) )
-                                        (EAp (EAp (EVar "+") (ENum 2)) (ENum 3)) )
-          ]
-          (EVar "bar")
-      )
-    ]
