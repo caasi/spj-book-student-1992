@@ -5,22 +5,22 @@ import Language
 
 
 
-type Token = String
 type LineNum = Int
+type Token = (LineNum, String)
 
 parse :: String -> CoreProgram
 parse = syntax . (clex 0)
 
-clex :: LineNum -> String -> [(LineNum, Token)]
+clex :: LineNum -> String -> [Token]
 clex _ [] = []
 clex lineNum (c : cs)
   | c == '\n' = clex (lineNum + 1) cs
 clex lineNum (c : cs)
   | isWhiteSpace c = clex lineNum cs
 clex lineNum (c : cs)
-  | isDigit c = (lineNum, num_token) : clex lineNum rest_cs
+  | isDigit c = (lineNum, num_tok) : clex lineNum rest_cs
                 where
-                  num_token = c : takeWhile isDigit cs
+                  num_tok = c : takeWhile isDigit cs
                   rest_cs = dropWhile isDigit cs
 clex lineNum (c : cs)
   | isAlpha c = (lineNum, var_tok) : clex lineNum rest_cs
@@ -49,5 +49,55 @@ chompUntilNewline (c : cs)
 twoCharOps :: [String]
 twoCharOps = ["==", "~=", ">=", "<=", "->"]
 
-syntax :: [(LineNum, Token)] -> CoreProgram
+
+
+syntax :: [Token] -> CoreProgram
 syntax = undefined
+
+type Parser a = [Token] -> [(a, [Token])]
+
+pLit :: String -> Parser String
+pLit s [] = []
+pLit s ((lineNum, tok):toks)
+  | s == tok  = [(s, toks)]
+  | otherwise = []
+
+pVar :: Parser String
+pVar [] = []
+pVar ((lineNum, tok):toks) = [(tok, toks)]
+
+pAlt :: Parser a -> Parser a -> Parser a
+pAlt p1 p2 toks = (p1 toks) ++ (p2 toks)
+
+pHelloOrGoodbye :: Parser String
+pHelloOrGoodbye = (pLit "hello") `pAlt` (pLit "goodbye")
+
+pThen :: (a -> b -> c) -> Parser a -> Parser b -> Parser c
+pThen combine p1 p2 toks
+  = [ (combine v1 v2, toks2) | (v1, toks1) <- p1 toks
+                             , (v2, toks2) <- p2 toks1
+    ]
+
+pGreeting :: Parser (String, String)
+pGreeting
+  = pThen keep_first
+          (pThen ((,)) pHelloOrGoodbye pVar)
+          (pLit "!")
+    where
+      keep_first a b = a
+
+pZeroOrMore :: Parser a -> Parser [a]
+pZeroOrMore p = (pOneOrMore p) `pAlt` (pEmpty [])
+
+-- # looks like `pure`
+pEmpty :: a -> Parser a
+pEmpty a = \toks -> [(a, toks)]
+
+pOneOrMore :: Parser a -> Parser [a]
+pOneOrMore p = pThen (:) p (pZeroOrMore p)
+
+pGreetingsN :: Parser Int
+pGreetingsN = (pZeroOrMore pGreeting) `pApply` length
+
+pApply :: Parser a -> (a -> b) -> Parser b
+pApply p1 f toks = flip map (p1 toks) (\(a, toks1) -> (f a, toks1))

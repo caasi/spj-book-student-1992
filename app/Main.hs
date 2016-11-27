@@ -6,16 +6,19 @@ import Parser
 
 
 
-program = "\
+program1 = "\
   \compose = f g -> f . g\n\
   \let a\n\
   \  = compose f g\n\
   \in a\
 \"
 
-program1 = "2 - 1 >="
-program2 = "2 - 1 >"
+program2 = "hello John ! goodbye James !"
+
+program3 = "hello John !"
 
 main :: IO ()
 main = do
-  putStrLn $ show $ clex 0 program
+  let showGreetingsN = (show . pGreetingsN . clex 0)
+  putStrLn $ showGreetingsN program2
+  putStrLn $ showGreetingsN program3
