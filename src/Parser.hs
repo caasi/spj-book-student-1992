@@ -101,3 +101,14 @@ pGreetingsN = (pZeroOrMore pGreeting) `pApply` length
 
 pApply :: Parser a -> (a -> b) -> Parser b
 pApply p1 f toks = flip map (p1 toks) (\(a, toks1) -> (f a, toks1))
+
+pOneOrMoreWithSep :: Parser a -> Parser b -> Parser [a]
+pOneOrMoreWithSep p1 p2 = pThen (:) p1 (pSepWithOneOrMore p2 p1)
+
+pSepWithOneOrMore :: Parser b -> Parser a -> Parser [a]
+pSepWithOneOrMore p2 p1
+  = (pThen (flip const) p2 (pOneOrMoreWithSep p1 p2)) `pAlt` (pEmpty [])
+
+pOneOrMoreGreetingsWithSep :: Parser [(String, String)]
+pOneOrMoreGreetingsWithSep
+  = pOneOrMoreWithSep (pThen ((,)) pHelloOrGoodbye pVar) (pLit ";")
