@@ -19,9 +19,14 @@ program3 = "hello John !"
 
 program4 = "hello John; goodbye James"
 
+program5 = "2 3 5 7 11 13 17 19"
+
+showProgram :: (Show a) => Parser a -> String -> String
+showProgram p = show . p . clex 0
+
 main :: IO ()
 main = do
-  let showGreetingsN = (show . pGreetingsN . clex 0)
-  putStrLn $ showGreetingsN program2
-  putStrLn $ showGreetingsN program3
-  putStrLn $ show $ pOneOrMoreGreetingsWithSep $ clex 0 program4
+  putStrLn $ showProgram pGreetingsN program2
+  putStrLn $ showProgram pGreetingsN program3
+  putStrLn $ showProgram pOneOrMoreGreetingsWithSep program4
+  putStrLn $ showProgram pNumbers program5

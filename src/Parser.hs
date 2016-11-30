@@ -56,15 +56,23 @@ syntax = undefined
 
 type Parser a = [Token] -> [(a, [Token])]
 
-pLit :: String -> Parser String
-pLit s [] = []
-pLit s ((lineNum, tok):toks)
-  | s == tok  = [(s, toks)]
+pSat :: (String -> Bool) -> Parser String
+pSat f [] = []
+pSat f ((lineNum, tok):toks)
+  | f tok     = [(tok, toks)]
   | otherwise = []
 
+pLit :: String -> Parser String
+pLit s = pSat (== s)
+
+keywords :: [String]
+keywords = ["let", "letrec", "case", "in", "of", "Pack"]
+
 pVar :: Parser String
-pVar [] = []
-pVar ((lineNum, tok):toks) = [(tok, toks)]
+pVar = pSat (flip notElem keywords)
+
+pNum :: Parser Int
+pNum = (pSat (and . map isNumber)) `pApply` read
 
 pAlt :: Parser a -> Parser a -> Parser a
 pAlt p1 p2 toks = (p1 toks) ++ (p2 toks)
@@ -112,3 +120,6 @@ pSepWithOneOrMore p2 p1
 pOneOrMoreGreetingsWithSep :: Parser [(String, String)]
 pOneOrMoreGreetingsWithSep
   = pOneOrMoreWithSep (pThen ((,)) pHelloOrGoodbye pVar) (pLit ";")
+
+pNumbers :: Parser [Int]
+pNumbers = pOneOrMore pNum
