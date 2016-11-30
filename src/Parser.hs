@@ -5,11 +5,14 @@ import Language
 
 
 
-type LineNum = Int
-type Token = (LineNum, String)
-
 parse :: String -> CoreProgram
 parse = syntax . (clex 0)
+
+
+
+-- the lexer
+type LineNum = Int
+type Token = (LineNum, String)
 
 clex :: LineNum -> String -> [Token]
 clex _ [] = []
@@ -51,10 +54,20 @@ twoCharOps = ["==", "~=", ">=", "<=", "->"]
 
 
 
+-- the parser
 syntax :: [Token] -> CoreProgram
-syntax = undefined
+syntax = take_first_parse . pProgram
+         where
+           take_first_parse ((prog, []) : others) = prog
+           take_first_parse (parse      : others) = take_first_parse others
+           take_first_parse others                = error $ "Syntax error: " ++ (show others)
+
+
 
 type Parser a = [Token] -> [(a, [Token])]
+
+keywords :: [String]
+keywords = ["let", "letrec", "case", "in", "of", "Pack{", "}"]
 
 pSat :: (String -> Bool) -> Parser String
 pSat f [] = []
@@ -62,13 +75,22 @@ pSat f ((lineNum, tok):toks)
   | f tok     = [(tok, toks)]
   | otherwise = []
 
+pApply :: Parser a -> (a -> b) -> Parser b
+pApply p1 f toks = flip map (p1 toks) (\(a, toks1) -> (f a, toks1))
+
+pFmap :: (a -> b) -> Parser a -> Parser b
+pFmap = flip pApply
+
+pAp :: Parser (a -> b) -> Parser a -> Parser b
+pAp pf p toks
+  = [ (f v, toks2) | (f, toks1) <- pf toks
+                   , (v, toks2) <- p toks1
+                   ]
+
 pLit :: String -> Parser String
 pLit s = pSat (== s)
 
-keywords :: [String]
-keywords = ["let", "letrec", "case", "in", "of", "Pack"]
-
-pVar :: Parser String
+pVar :: Parser Name
 pVar = pSat (flip notElem keywords)
 
 pNum :: Parser Int
@@ -77,38 +99,28 @@ pNum = (pSat (and . map isNumber)) `pApply` read
 pAlt :: Parser a -> Parser a -> Parser a
 pAlt p1 p2 toks = (p1 toks) ++ (p2 toks)
 
-pHelloOrGoodbye :: Parser String
-pHelloOrGoodbye = (pLit "hello") `pAlt` (pLit "goodbye")
-
 pThen :: (a -> b -> c) -> Parser a -> Parser b -> Parser c
-pThen combine p1 p2 toks
-  = [ (combine v1 v2, toks2) | (v1, toks1) <- p1 toks
-                             , (v2, toks2) <- p2 toks1
-    ]
+pThen combine p1 p2 = combine `pFmap` p1 `pAp` p2
 
-pGreeting :: Parser (String, String)
-pGreeting
-  = pThen keep_first
-          (pThen ((,)) pHelloOrGoodbye pVar)
-          (pLit "!")
-    where
-      keep_first a b = a
+pThen3 :: (a -> b -> c -> d) -> Parser a -> Parser b -> Parser c -> Parser d
+pThen3 combine p1 p2 p3 = combine `pFmap` p1 `pAp` p2 `pAp` p3
+
+pThen4 :: (a -> b -> c -> d -> e)
+       -> Parser a -> Parser b -> Parser c -> Parser d -> Parser e
+pThen4 combine p1 p2 p3 p4 = combine `pFmap` p1 `pAp` p2 `pAp` p3 `pAp` p4
+
+pThen5 :: (a -> b -> c -> d -> e -> f)
+       -> Parser a -> Parser b -> Parser c -> Parser d -> Parser e -> Parser f
+pThen5 combine p1 p2 p3 p4 p5 = combine `pFmap` p1 `pAp` p2 `pAp` p3 `pAp` p4 `pAp` p5
+
+pEmpty :: a -> Parser a
+pEmpty a = \toks -> [(a, toks)]
 
 pZeroOrMore :: Parser a -> Parser [a]
 pZeroOrMore p = (take 1) . ((pOneOrMore p) `pAlt` (pEmpty []))
 
--- # looks like `pure`
-pEmpty :: a -> Parser a
-pEmpty a = \toks -> [(a, toks)]
-
 pOneOrMore :: Parser a -> Parser [a]
 pOneOrMore p = pThen (:) p (pZeroOrMore p)
-
-pGreetingsN :: Parser Int
-pGreetingsN = (pZeroOrMore pGreeting) `pApply` length
-
-pApply :: Parser a -> (a -> b) -> Parser b
-pApply p1 f toks = flip map (p1 toks) (\(a, toks1) -> (f a, toks1))
 
 pOneOrMoreWithSep :: Parser a -> Parser b -> Parser [a]
 pOneOrMoreWithSep p1 p2 = pThen (:) p1 (pSepWithOneOrMore p2 p1)
@@ -117,9 +129,65 @@ pSepWithOneOrMore :: Parser b -> Parser a -> Parser [a]
 pSepWithOneOrMore p2 p1
   = (take 1) . ((pThen (flip const) p2 (pOneOrMoreWithSep p1 p2)) `pAlt` (pEmpty []))
 
-pOneOrMoreGreetingsWithSep :: Parser [(String, String)]
-pOneOrMoreGreetingsWithSep
-  = pOneOrMoreWithSep (pThen ((,)) pHelloOrGoodbye pVar) (pLit ";")
+pProgram :: Parser CoreProgram
+pProgram = pOneOrMoreWithSep pSc (pLit ";")
 
-pNumbers :: Parser [Int]
-pNumbers = pOneOrMore pNum
+pSc :: Parser CoreScDefn
+pSc = pThen4 mk_sc pVar (pZeroOrMore pVar) (pLit "=") pAExpr
+      where
+        mk_sc n ns _ expr = (n, ns, expr)
+
+pAExpr :: Parser CoreExpr
+pAExpr = pExpr `pAlt`
+         (pThen3 (\_ expr _ -> expr) (pLit "(") pExpr (pLit ")"))
+
+pExpr :: Parser CoreExpr
+pExpr
+  = ( EVar `pFmap` pVar ) `pAlt`
+    ( ENum `pFmap` pNum ) `pAlt`
+    ( pThen5
+        (\_ tag _ as _ -> EConstr tag as)
+        (pLit "Pack{")
+        pNum
+        (pLit ",")
+        pNum
+        (pLit "}")
+    ) `pAlt`
+    ( EAp `pFmap` pAExpr `pAp` pAExpr ) `pAlt`
+    ( pThen4
+        (\isRec namedExprs _ expr -> ELet isRec namedExprs expr)
+        (((pLit "letrec") `pAlt` (pLit "let")) `pApply` isRecursive)
+        ( pOneOrMoreWithSep
+            ( pThen3
+                (\name _ expr -> (name, expr))
+                pVar
+                (pLit "=")
+                pAExpr
+            )
+            (pLit ";")
+        )
+        (pLit "in")
+        pAExpr
+     ) `pAlt`
+    ( pThen4
+        (\_ expr _ alters -> ECase expr alters)
+        (pLit "case")
+        pAExpr
+        (pLit "of")
+        (pOneOrMoreWithSep pAlter (pLit ";"))
+    ) `pAlt`
+    ( pThen4
+        (\_ vars _ expr -> ELam vars expr)
+        (pLit "\\")
+        (pOneOrMore pVar)
+        (pLit ".")
+        pAExpr
+    )
+
+pAlter :: Parser CoreAlt
+pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pAExpr
+         where
+           mk_alter id vars _ expr = (id, vars, expr)
+
+pTag :: Parser Int
+pTag = pThen3 (\_ tag _ -> tag) (pLit "<") pNum (pLit ">")

@@ -27,6 +27,10 @@ type IsRec = Bool
 recursive, nonRecursive :: IsRec
 recursive    = True
 nonRecursive = False
+isRecursive :: String -> IsRec
+isRecursive "letrec" = recursive
+isRecursive "let"    = nonRecursive
+isRecursive _        = error "Syntax error in a let expression"
 
 bindersOf :: [(a, b)] -> [a]
 bindersOf defns = [name | (name, rhs) <- defns]

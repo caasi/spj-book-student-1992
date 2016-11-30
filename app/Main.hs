@@ -7,26 +7,22 @@ import Parser
 
 
 program1 = "\
-  \compose = f g -> f . g\n\
-  \let a\n\
-  \  = compose f g\n\
-  \in a\
+  \f = 3\n\
 \"
 
-program2 = "hello John ! goodbye James !"
+program2 = "\
+  \f = 3 ;\n\
+  \g x y = let z = x in z\n\
+\"
 
-program3 = "hello John !"
-
-program4 = "hello John; goodbye James"
-
-program5 = "2 3 5 7 11 13 17 19"
-
-showProgram :: (Show a) => Parser a -> String -> String
-showProgram p = show . p . clex 0
+program3 = "\
+  \f = 3 ;\n\
+  \g x y = let z = x in z ;\n\
+  \h x = case (let y = x in y) of\n\
+  \        <1> -> 2 ;\n\
+  \        <2> -> 5\n\
+\"
 
 main :: IO ()
 main = do
-  putStrLn $ showProgram pGreetingsN program2
-  putStrLn $ showProgram pGreetingsN program3
-  putStrLn $ showProgram pOneOrMoreGreetingsWithSep program4
-  putStrLn $ showProgram pNumbers program5
+  (putStrLn . show . parse) program1
