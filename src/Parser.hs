@@ -95,7 +95,7 @@ pGreeting
       keep_first a b = a
 
 pZeroOrMore :: Parser a -> Parser [a]
-pZeroOrMore p = (pOneOrMore p) `pAlt` (pEmpty [])
+pZeroOrMore p = (take 1) . ((pOneOrMore p) `pAlt` (pEmpty []))
 
 -- # looks like `pure`
 pEmpty :: a -> Parser a
@@ -115,7 +115,7 @@ pOneOrMoreWithSep p1 p2 = pThen (:) p1 (pSepWithOneOrMore p2 p1)
 
 pSepWithOneOrMore :: Parser b -> Parser a -> Parser [a]
 pSepWithOneOrMore p2 p1
-  = (pThen (flip const) p2 (pOneOrMoreWithSep p1 p2)) `pAlt` (pEmpty [])
+  = (take 1) . ((pThen (flip const) p2 (pOneOrMoreWithSep p1 p2)) `pAlt` (pEmpty []))
 
 pOneOrMoreGreetingsWithSep :: Parser [(String, String)]
 pOneOrMoreGreetingsWithSep
