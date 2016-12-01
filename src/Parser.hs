@@ -67,7 +67,7 @@ syntax = take_first_parse . pProgram
 type Parser a = [Token] -> [(a, [Token])]
 
 keywords :: [String]
-keywords = ["let", "letrec", "case", "in", "of", "Pack{", "}"]
+keywords = ["let", "letrec", "case", "in", "of", "Pack{", "}", "=", "->", ",", ";"]
 
 pSat :: (String -> Bool) -> Parser String
 pSat f [] = []
@@ -133,18 +133,18 @@ pProgram :: Parser CoreProgram
 pProgram = pOneOrMoreWithSep pSc (pLit ";")
 
 pSc :: Parser CoreScDefn
-pSc = pThen4 mk_sc pVar (pZeroOrMore pVar) (pLit "=") pAExpr
+pSc = pThen4 mk_sc pVar (pZeroOrMore pVar) (pLit "=") pExpr
       where
         mk_sc n ns _ expr = (n, ns, expr)
 
-pAExpr :: Parser CoreExpr
-pAExpr = pExpr `pAlt`
-         (pThen3 (\_ expr _ -> expr) (pLit "(") pExpr (pLit ")"))
-
-pExpr :: Parser CoreExpr
-pExpr
+-- atomic expression
+pAexpr :: Parser CoreExpr
+pAexpr
+    -- var
   = ( EVar `pFmap` pVar ) `pAlt`
+    -- num
     ( ENum `pFmap` pNum ) `pAlt`
+    -- Pack{num,num}
     ( pThen5
         (\_ tag _ as _ -> EConstr tag as)
         (pLit "Pack{")
@@ -153,7 +153,20 @@ pExpr
         pNum
         (pLit "}")
     ) `pAlt`
-    ( EAp `pFmap` pAExpr `pAp` pAExpr ) `pAlt`
+    -- ( expr )
+    ( pThen3
+        (\_ expr _ -> expr)
+        (pLit "(")
+        pExpr
+        (pLit ")")
+    )
+
+pExpr :: Parser CoreExpr
+pExpr
+    -- expr aexpr
+  = ( (pOneOrMore pAexpr) `pApply` mk_ap_chain ) `pAlt`
+    -- let defns in expr
+    -- letrec defns in expr
     ( pThen4
         (\isRec namedExprs _ expr -> ELet isRec namedExprs expr)
         (((pLit "letrec") `pAlt` (pLit "let")) `pApply` isRecursive)
@@ -162,30 +175,39 @@ pExpr
                 (\name _ expr -> (name, expr))
                 pVar
                 (pLit "=")
-                pAExpr
+                pExpr
             )
             (pLit ";")
         )
         (pLit "in")
-        pAExpr
-     ) `pAlt`
+        pExpr
+    ) `pAlt`
+    -- case expr of alts
     ( pThen4
         (\_ expr _ alters -> ECase expr alters)
         (pLit "case")
-        pAExpr
+        pExpr
         (pLit "of")
         (pOneOrMoreWithSep pAlter (pLit ";"))
     ) `pAlt`
+    -- \ var1...varN . expr
     ( pThen4
         (\_ vars _ expr -> ELam vars expr)
         (pLit "\\")
         (pOneOrMore pVar)
         (pLit ".")
-        pAExpr
-    )
+        pExpr
+    ) `pAlt`
+    -- paexpr
+    ( pAexpr )
+
+mk_ap_chain :: [CoreExpr] -> CoreExpr
+mk_ap_chain [] = error "Syntax error: EAp"
+mk_ap_chain (x:[]) = x
+mk_ap_chain (x:y:xs) = mk_ap_chain (EAp x y : xs)
 
 pAlter :: Parser CoreAlt
-pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pAExpr
+pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pExpr
          where
            mk_alter id vars _ expr = (id, vars, expr)
 
