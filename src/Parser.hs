@@ -69,7 +69,14 @@ data PartialExpr = NoOp | FoundOp Name CoreExpr
 type Parser a = [Token] -> [(a, [Token])]
 
 keywords :: [String]
-keywords = ["let", "letrec", "case", "in", "of", "Pack{", "}", "=", "->", ",", ";"]
+keywords
+  = [ "let", "letrec"
+    , "case", "in", "of"
+    , "Pack{", ",", "}"
+    , "=", "->"
+    , ";"
+    , "&", "|", "+", "-", "*", "/"
+    ] ++ relOps
 
 relOps :: [String]
 relOps = ["<", "<=", "==", "~=", ">=", ">"]
@@ -96,10 +103,10 @@ pLit :: String -> Parser String
 pLit s = pSat (== s)
 
 pVar :: Parser Name
-pVar = pSat (flip notElem keywords)
+pVar = pSat (\s -> s `notElem` keywords && (and . map isAlpha) s)
 
 pNum :: Parser Int
-pNum = (pSat (and . map isNumber)) `pApply` read
+pNum = read `pFmap` (pSat (and . map isDigit))
 
 pRelOp :: Parser Name
 pRelOp = pSat (flip elem relOps)
@@ -203,8 +210,8 @@ pExpr
         (pLit ".")
         pExpr
     ) `pAlt`
-    -- expr aexpr
-    ( pExpr1 )
+    -- expr1
+    pExpr1
 
 pAlter :: Parser CoreAlt
 pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pExpr
