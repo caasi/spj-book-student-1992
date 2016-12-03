@@ -64,10 +64,15 @@ syntax = take_first_parse . pProgram
 
 
 
+data PartialExpr = NoOp | FoundOp Name CoreExpr
+
 type Parser a = [Token] -> [(a, [Token])]
 
 keywords :: [String]
 keywords = ["let", "letrec", "case", "in", "of", "Pack{", "}", "=", "->", ",", ";"]
+
+relOps :: [String]
+relOps = ["<", "<=", "==", "~=", ">=", ">"]
 
 pSat :: (String -> Bool) -> Parser String
 pSat f [] = []
@@ -95,6 +100,9 @@ pVar = pSat (flip notElem keywords)
 
 pNum :: Parser Int
 pNum = (pSat (and . map isNumber)) `pApply` read
+
+pRelOp :: Parser Name
+pRelOp = pSat (flip elem relOps)
 
 pAlt :: Parser a -> Parser a -> Parser a
 pAlt p1 p2 toks = (p1 toks) ++ (p2 toks)
@@ -163,11 +171,8 @@ pAexpr
 
 pExpr :: Parser CoreExpr
 pExpr
-    -- expr aexpr
-  = ( (pOneOrMore pAexpr) `pApply` mk_ap_chain ) `pAlt`
-    -- let defns in expr
-    -- letrec defns in expr
-    ( pThen4
+    -- letrec, let defns in expr
+  = ( pThen4
         (\isRec namedExprs _ expr -> ELet isRec namedExprs expr)
         (((pLit "letrec") `pAlt` (pLit "let")) `pApply` isRecursive)
         ( pOneOrMoreWithSep
@@ -198,13 +203,8 @@ pExpr
         (pLit ".")
         pExpr
     ) `pAlt`
-    -- paexpr
-    ( pAexpr )
-
-mk_ap_chain :: [CoreExpr] -> CoreExpr
-mk_ap_chain [] = error "Syntax error: EAp"
-mk_ap_chain (x:[]) = x
-mk_ap_chain (x:y:xs) = mk_ap_chain (EAp x y : xs)
+    -- expr aexpr
+    ( pExpr1 )
 
 pAlter :: Parser CoreAlt
 pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pExpr
@@ -213,3 +213,49 @@ pAlter = pThen4 mk_alter pTag (pZeroOrMore pVar) (pLit "->") pExpr
 
 pTag :: Parser Int
 pTag = pThen3 (\_ tag _ -> tag) (pLit "<") pNum (pLit ">")
+
+pExpr1 :: Parser CoreExpr
+pExpr1 = assembleOp `pFmap` pExpr2 `pAp` pExpr1c
+
+pExpr1c :: Parser PartialExpr
+pExpr1c = (FoundOp `pFmap` (pLit "|") `pAp` pExpr1) `pAlt` (pEmpty NoOp)
+
+pExpr2 :: Parser CoreExpr
+pExpr2 = assembleOp `pFmap` pExpr3 `pAp` pExpr2c
+
+pExpr2c :: Parser PartialExpr
+pExpr2c = (FoundOp `pFmap` (pLit "&") `pAp` pExpr2) `pAlt` (pEmpty NoOp)
+
+pExpr3 :: Parser CoreExpr
+pExpr3 = assembleOp `pFmap` pExpr4 `pAp` pExpr3c
+
+pExpr3c :: Parser PartialExpr
+pExpr3c = (FoundOp `pFmap` pRelOp `pAp` pExpr4) `pAlt` (pEmpty NoOp)
+
+pExpr4 :: Parser CoreExpr
+pExpr4 = assembleOp `pFmap` pExpr5 `pAp` pExpr4c
+
+pExpr4c :: Parser PartialExpr
+pExpr4c = (FoundOp `pFmap` (pLit "+") `pAp` pExpr4) `pAlt`
+          (FoundOp `pFmap` (pLit "-") `pAp` pExpr5) `pAlt`
+          (pEmpty NoOp)
+
+pExpr5 :: Parser CoreExpr
+pExpr5 = assembleOp `pFmap` pExpr6 `pAp` pExpr5c
+
+pExpr5c :: Parser PartialExpr
+pExpr5c = (FoundOp `pFmap` (pLit "*") `pAp` pExpr5) `pAlt`
+          (FoundOp `pFmap` (pLit "/") `pAp` pExpr6) `pAlt`
+          (pEmpty NoOp)
+
+pExpr6 :: Parser CoreExpr
+pExpr6 = (pOneOrMore pAexpr) `pApply` mk_ap_chain
+
+mk_ap_chain :: [CoreExpr] -> CoreExpr
+mk_ap_chain [] = error "Syntax error: EAp"
+mk_ap_chain (x:[]) = x
+mk_ap_chain (x:y:xs) = mk_ap_chain (EAp x y : xs)
+
+assembleOp :: CoreExpr -> PartialExpr -> CoreExpr
+assembleOp e1 NoOp = e1
+assembleOp e1 (FoundOp op e2) = EAp (EAp (EVar op) e1) e2
