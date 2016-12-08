@@ -4,6 +4,8 @@ import Data.List
 
 
 
+spaces = flip replicate ' '
+
 shownum n = show n
 
 hd :: [a] -> a

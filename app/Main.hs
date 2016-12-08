@@ -3,6 +3,7 @@ module Main where
 import Language
 import PrettyPrint
 import Parser
+import MultState
 
 
 
@@ -17,3 +18,4 @@ program = "\
 main :: IO ()
 main = do
   (putStrLn . show . parse) program
+  (putStr . layn) $ map show (evalMult (2, 3, 0, 0))

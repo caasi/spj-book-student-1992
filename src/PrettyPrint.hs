@@ -129,8 +129,6 @@ flatten col ((INewline, indent) : seqs)
 flatten col ((IIndent seq, indent) : seqs)
   = flatten col ((seq, col) : seqs)
 
-spaces = flip replicate ' '
-
 -- other useful functions
 iNum :: Int -> Iseq
 iNum n = iStr $ show n
