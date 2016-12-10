@@ -68,7 +68,59 @@ allocateSc heap (name, args, body)
 
 
 eval :: TiState -> [TiState]
-eval = undefined
+eval state = state : rest_states
+       where
+         rest_states
+           | tiFinal state = [] -- # so I can put a `#` in front of my guard?
+           | otherwise     = eval next_states
+         next_states = doAdmin (step state)
+
+doAdmin :: TiState -> TiState
+doAdmin state = applyToStats tiStatIncSteps state
+
+tiFinal :: TiState -> Bool
+tiFinal ([sole_addr], dump, heap, globals, stats) = isDataNode (hLookup heap sole_addr)
+tiFinal ([], dump, heap, globals, stats) = error "Empty stack!"
+tiFinal state = False
+
+isDataNode :: Node -> Bool
+isDataNode (NNum n) = True
+isDataNode node     = False
+
+step :: TiState -> TiState
+step state
+  = dispatch (hLookup heap (hd stack))
+    where
+      (stack, dump, heap, globals, stats) = state
+      dispatch (NNum n)                  = numStep state n
+      dispatch (NAp a1 a2)               = apStep state a1 a2
+      dispatch (NSupercomb sc args body) = scStep state sc args body
+
+numStep :: TiState -> Int -> TiState
+numStep state n = error "Number applied as a function!"
+
+-- # tumbling down to the spine
+apStep :: TiState -> Addr -> Addr -> TiState
+apStep (stack, dump, heap, globals, stats) a1 a2
+  = (a1 : stack, dump, heap, globals, stats)
+
+scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
+scStep (stack, dump, heap, globals, stats) sc_name arg_names body
+  = (new_stack, dump, heap, globals, stats)
+    where
+      new_stack = result_addr : (drop (length arg_names + 1) stack)
+      (new_heap, result_addr) = instantiate body heap env
+      env = arg_bindings ++ globals
+      arg_bindings = zip2 arg_names (getargs heap stack)
+
+getargs :: TiHeap -> TiStack -> [Addr]
+getargs heap (sc : stack)
+  = map get_arg stack
+    -- # take the right branch as the argument
+    where get_arg addr = arg where (NAp fun arg) = hLookup heap addr
+
+instantiate :: CoreExpr -> TiHeap -> ASSOC Name Addr -> (TiHeap, Addr)
+instantiate = undefined
 
 
 
