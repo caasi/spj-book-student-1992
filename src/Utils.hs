@@ -68,7 +68,7 @@ type ASSOC a b = [(a, b)]
 aLookup :: (Eq a) => ASSOC a b -> a -> b -> b
 aLookup [] k' def = def
 aLookup ((k, v):bs) k' def
-  | k == k' = def
+  | k == k' = v
   | k /= k' = aLookup bs k' def
 
 aDomain :: ASSOC a b -> [a]
