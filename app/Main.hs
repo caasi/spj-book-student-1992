@@ -3,19 +3,18 @@ module Main where
 import Language
 import PrettyPrint
 import Parser
-import MultState
+import TiState
+import Utils
 
 
 
 program = "\
-  \f = 3;\n\
-  \g x y = let z = x in z;\n\
-  \h x = case (let y = x in y) of\n\
-  \        <1> -> 2 + 1 * x;\n\
-  \        <2> -> 6\n\
+  \main = S K K 3\n\
 \"
 
 main :: IO ()
 main = do
-  (putStrLn . show . parse) program
-  (putStr . layn) $ map show (evalMult (2, 3, 0, 0))
+  --let coreProgram = parse program
+  --let states@(stack, dump, (_, _, heap), globals, stats) = compile coreProgram
+  --(putStrLn . show) $ (stack, heap, globals, stats)
+  (putStrLn . runProg) program
