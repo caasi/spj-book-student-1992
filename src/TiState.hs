@@ -150,12 +150,12 @@ showResults states
 
 showState :: TiState -> Iseq
 showState (stack, dump, heap, globals, stats)
-  = iConcat [ showStack heap stack, iNewline ]
+  = iConcat [ showStack heap stack, iNewline, showHeap heap, iNewline ]
 
 showStack :: TiHeap -> TiStack -> Iseq
 showStack heap stack
   = iConcat
-      [ iStr "Stk ["
+      [ iStr "Stk  ["
       , iIndent (iInterleave iNewline (map show_stack_item stack))
       , iStr " ]"
       ]
@@ -195,9 +195,10 @@ showAddr :: Addr -> Iseq
 showAddr addr = iStr (show addr)
 
 showFWAddr :: Addr -> Iseq -- Show address in field of width 4
-showFWAddr addr = iStr (spaces (4 - length str) ++ str)
-                  where
-                    str = show addr
+showFWAddr addr
+  = iStr (spaces (4 - length str) ++ str)
+    where
+      str = show addr
 
 showStats :: TiState -> Iseq
 showStats (stack, dump, heap, globals, stats)
@@ -208,3 +209,23 @@ showStats (stack, dump, heap, globals, stats)
       , iNum (tiStatGetSteps stats)
       ]
 
+
+
+showHeap :: TiHeap -> Iseq
+showHeap (size, free, cts) = showASSOC cts
+
+showASSOC :: ASSOC Addr Node -> Iseq
+showASSOC pairs
+  = iConcat
+    [ iStr "Heap ["
+    , iIndent (iInterleave iNewline (map showAddrNode pairs))
+    , iStr " ]"
+    ]
+
+showAddrNode :: (Addr, Node) -> Iseq
+showAddrNode (addr, node)
+  = iConcat
+    [ showFWAddr addr
+    , iStr ": "
+    , showNode node
+    ]
