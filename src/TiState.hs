@@ -109,7 +109,9 @@ apStep (stack, dump, heap, globals, stats) a1 a2
 
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep (stack, dump, heap, globals, stats) sc_name arg_names body
-  = (new_stack, dump, new_heap, globals, stats)
+  = if (length arg_bindings) == (length arg_names)
+      then (new_stack, dump, new_heap, globals, stats)
+      else error "Insufficient arguments"
     where
       new_stack = result_addr : (drop (length arg_names + 1) stack)
       (new_heap, result_addr) = instantiate body heap env
