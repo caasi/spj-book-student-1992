@@ -9,7 +9,7 @@ import Utils
 
 
 program = "\
-  \main = S K K\n\
+  \main = S K K 3\n\
 \"
 
 main :: IO ()

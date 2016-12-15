@@ -28,16 +28,43 @@ data Node
 
 type TiGlobals = ASSOC Name Addr
 
-type TiStats = Int
+type TiStats = (Int, Int, Int, Int, Int)
 
 tiStatInitial :: TiStats
-tiStatInitial = 0
+tiStatInitial = (0, 0, 0, 0, 0)
 
 tiStatIncSteps :: TiStats -> TiStats
-tiStatIncSteps s = s + 1
+tiStatIncSteps (s, sr, pr, h, d) = (s + 1, sr, pr, h, d)
+
+tiStatIncSReductions :: TiStats -> TiStats
+tiStatIncSReductions (s, sr, pr, h, d) = (s, sr + 1, pr, h, d)
+
+tiStatIncPReductions :: TiStats -> TiStats
+tiStatIncPReductions (s, sr, pr, h, d) = (s, sr, pr + 1, h, d)
+
+tiStatIncHeap :: Int -> TiStats -> TiStats
+tiStatIncHeap n (s, sr, pr, h, d) = (s, sr, pr, h + n, d)
+
+tiStatSetMaxDepth :: Int -> TiStats -> TiStats
+tiStatSetMaxDepth n stat@(s, sr, pr, h, d)
+  = if n > d
+      then (s, sr, pr, h, n)
+      else stat
 
 tiStatGetSteps :: TiStats -> Int
-tiStatGetSteps s = s
+tiStatGetSteps (s, sr, pr, h, d) = s
+
+tiStatGetSReductions :: TiStats -> Int
+tiStatGetSReductions (s, sr, pr, h, d) = sr
+
+tiStatGetPReductions :: TiStats -> Int
+tiStatGetPReductions (s, sr, pr, h, d) = pr
+
+tiStatGetHeap :: TiStats -> Int
+tiStatGetHeap (s, sr, pr, h, d) = h
+
+tiStatGetDepth :: TiStats -> Int
+tiStatGetDepth (s, sr, pr, h, d) = d
 
 applyToStats :: (TiStats -> TiStats) -> TiState -> TiState
 applyToStats stats_fn (stack, dump, heap, sc_defs, stats)
@@ -79,7 +106,11 @@ eval state = state : rest_states
          next_states = doAdmin (step state)
 
 doAdmin :: TiState -> TiState
-doAdmin state = applyToStats tiStatIncSteps state
+doAdmin state
+  = state''
+    where
+      state'' = applyToStats (tiStatSetMaxDepth (length stack)) state'
+      state'@(stack, dump, heap, glabals, stats) = applyToStats tiStatIncSteps state
 
 tiFinal :: TiState -> Bool
 tiFinal ([sole_addr], dump, heap, globals, stats) = isDataNode (hLookup heap sole_addr)
@@ -110,9 +141,11 @@ apStep (stack, dump, heap, globals, stats) a1 a2
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep (stack, dump, heap, globals, stats) sc_name arg_names body
   = if (length arg_bindings) == (length arg_names)
-      then (new_stack, dump, new_heap, globals, stats)
+      then (new_stack, dump, new_heap, globals, new_stats')
       else error "Insufficient arguments"
     where
+      new_stats' = tiStatIncHeap (hSize new_heap - hSize heap) new_stats
+      new_stats = tiStatIncSReductions stats
       new_stack = result_addr : (drop (length arg_names + 1) stack)
       (new_heap, result_addr) = instantiate body heap env
       env = arg_bindings ++ globals
@@ -209,6 +242,18 @@ showStats (stack, dump, heap, globals, stats)
       , iNewline
       , iStr "Total number of steps = "
       , iNum (tiStatGetSteps stats)
+      , iNewline
+      , iStr "Total number of supercombinator reductions = "
+      , iNum (tiStatGetSReductions stats)
+      , iNewline
+      , iStr "Total number of primitive reductions = "
+      , iNum (tiStatGetPReductions stats)
+      , iNewline
+      , iStr "New heaps allocated = "
+      , iNum (tiStatGetHeap stats)
+      , iNewline
+      , iStr "Max stack depth = "
+      , iNum (tiStatGetDepth stats)
       ]
 
 
