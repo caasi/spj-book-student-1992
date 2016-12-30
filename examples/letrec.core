@@ -1,0 +1,6 @@
+main =
+  letrec
+    drei = three;
+    three = 3
+  in
+    K drei three

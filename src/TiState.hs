@@ -175,7 +175,14 @@ instantiate (ECase e alts) heap env = error "Can't instantiate case exprs"
 instantiateConstr tag arity heap env
   = error "Can't instantiate constructors yet"
 instantiateLet isrec defs body heap env
-  = error "Can't instantiate let(rec)s yet"
+  = instantiate body newHeap newEnv
+    where
+      (newHeap, addrs) = mapAccuml (instantiateDefs isrec) heap exprs
+      newEnv = (zip2 names addrs) ++ env
+      instantiateDefs True heap expr = instantiate expr heap newEnv
+      instantiateDefs False heap expr = instantiate expr heap env
+      exprs = aRange defs
+      names = aDomain defs
 
 
 

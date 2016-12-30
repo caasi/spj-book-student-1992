@@ -8,13 +8,10 @@ import Utils
 
 
 
-program = "\
-  \main = S K K 3\n\
-\"
-
 main :: IO ()
 main = do
+  --program <- getContents
   --let coreProgram = parse program
   --let states@(stack, dump, (_, _, heap), globals, stats) = step $ step $ step $ step $ compile coreProgram
   --(putStrLn . show) $ (stack, heap, globals, stats)
-  (putStrLn . runProg) program
+  getContents >>= (putStrLn . runProg)
