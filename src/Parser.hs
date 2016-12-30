@@ -103,7 +103,7 @@ pLit :: String -> Parser String
 pLit s = pSat (== s)
 
 pVar :: Parser Name
-pVar = pSat (\s -> s `notElem` keywords && (and . map isAlpha) s)
+pVar = pSat (\s@(c:ss) -> s `notElem` keywords && isAlpha c && (and . map isAlphaNum) ss)
 
 pNum :: Parser Int
 pNum = read `pFmap` (pSat (and . map isDigit))

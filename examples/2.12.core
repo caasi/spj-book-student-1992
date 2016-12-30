@@ -1,0 +1,1 @@
+main = letrec f = f x in f
