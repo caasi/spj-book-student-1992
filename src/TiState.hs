@@ -143,15 +143,14 @@ apStep (stack, dump, heap, globals, stats) a1 a2
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep (stack, dump, heap, globals, stats) sc_name arg_names body
   = if (length arg_bindings) == (length arg_names)
-      then (new_stack, dump, new_heap', globals, new_stats')
+      then (new_stack, dump, new_heap, globals, new_stats')
       else error "Insufficient arguments"
     where
       new_stats' = tiStatIncHeap (hSize new_heap - hSize heap) new_stats
       new_stats = tiStatIncSReductions stats
-      new_stack = result_addr : ss
-      new_heap' = hUpdate new_heap root_addr (NInd result_addr)
+      new_stack = root_addr : ss
+      new_heap = instantiateAndUpdate body root_addr heap env
       (root_addr:ss) = drop (length arg_names) stack
-      (new_heap, result_addr) = instantiate body heap env
       env = arg_bindings ++ globals
       arg_bindings = zip2 arg_names (getargs heap stack)
 
@@ -185,14 +184,41 @@ instantiate (ECase e alts) heap env = error "Can't instantiate case exprs"
 instantiateConstr tag arity heap env
   = error "Can't instantiate constructors yet"
 instantiateLet isrec defs body heap env
-  = instantiate body newHeap newEnv
+  = instantiate body new_heap new_env
     where
-      (newHeap, addrs) = mapAccuml (instantiateDefs isrec) heap exprs
-      newEnv = (zip2 names addrs) ++ env
-      instantiateDefs True heap expr = instantiate expr heap newEnv
+      (new_heap, addrs) = mapAccuml (instantiateDefs isrec) heap exprs
+      new_env = (zip2 names addrs) ++ env
+      instantiateDefs True heap expr = instantiate expr heap new_env
       instantiateDefs False heap expr = instantiate expr heap env
       exprs = aRange defs
       names = aDomain defs
+
+instantiateAndUpdate :: CoreExpr -> Addr -> TiHeap -> ASSOC Name Addr -> TiHeap
+instantiateAndUpdate (ENum n) upd_addr heap env
+  = hUpdate heap upd_addr (NNum n)
+instantiateAndUpdate (EAp e1 e2) upd_addr heap env
+  = hUpdate heap2 upd_addr (NAp a1 a2)
+    where
+      (heap1, a1) = instantiate e1 heap  env
+      (heap2, a2) = instantiate e2 heap1 env
+instantiateAndUpdate (EVar v) upd_addr heap env
+  = hUpdate heap upd_addr (NInd addr)
+    where
+      addr = aLookup env v (error ("Undefined name " ++ show v))
+instantiateAndUpdate (EConstr tag arity) upd_addr heap env
+  = error "Can't instantiate contructors yet"
+instantiateAndUpdate (ELet isrec defs body) upd_addr heap env
+  = hUpdate new_heap' upd_addr (NInd addr)
+    where
+      (new_heap', addr) = instantiate body new_heap new_env
+      (new_heap, addrs) = mapAccuml (instantiateDefs isrec) heap exprs
+      new_env = (zip2 names addrs) ++ env
+      instantiateDefs True heap expr = instantiate expr heap new_env
+      instantiateDefs False heap expr = instantiate expr heap env
+      exprs = aRange defs
+      names = aDomain defs
+instantiateAndUpdate (ECase e alts) upd_addr heap env
+  = error "Can't instantiate case exprs"
 
 
 
