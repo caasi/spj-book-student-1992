@@ -24,6 +24,7 @@ data Node
   = NAp Addr Addr                   -- Application
   | NSupercomb Name [Name] CoreExpr -- Supercombinator
   | NNum Int                        -- A number
+  | NInd Addr                       -- Indirection
   deriving (Show)
 
 type TiGlobals = ASSOC Name Addr
@@ -129,6 +130,7 @@ step state
       dispatch (NNum n)                  = numStep state n
       dispatch (NAp a1 a2)               = apStep state a1 a2
       dispatch (NSupercomb sc args body) = scStep state sc args body
+      dispatch (NInd addr)               = scInd state addr
 
 numStep :: TiState -> Int -> TiState
 numStep state n = error "Number applied as a function!"
@@ -141,15 +143,23 @@ apStep (stack, dump, heap, globals, stats) a1 a2
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep (stack, dump, heap, globals, stats) sc_name arg_names body
   = if (length arg_bindings) == (length arg_names)
-      then (new_stack, dump, new_heap, globals, new_stats')
+      then (new_stack, dump, new_heap', globals, new_stats')
       else error "Insufficient arguments"
     where
       new_stats' = tiStatIncHeap (hSize new_heap - hSize heap) new_stats
       new_stats = tiStatIncSReductions stats
-      new_stack = result_addr : (drop (length arg_names + 1) stack)
+      new_stack = result_addr : ss
+      new_heap' = hUpdate new_heap root_addr (NInd result_addr)
+      (root_addr:ss) = drop (length arg_names) stack
       (new_heap, result_addr) = instantiate body heap env
       env = arg_bindings ++ globals
       arg_bindings = zip2 arg_names (getargs heap stack)
+
+scInd :: TiState -> Addr -> TiState
+scInd (stack, dump, heap, globals, stats) addr
+  = (new_stack, dump, heap, globals, stats)
+    where
+      new_stack = addr : (tl stack)
 
 getargs :: TiHeap -> TiStack -> [Addr]
 getargs heap (sc : stack)
@@ -232,6 +242,7 @@ showNode (NAp a1 a2)
       ]
 showNode (NSupercomb name args body) = iStr ("NSupercomb " ++ name)
 showNode (NNum n) = (iStr "NNum ") `iAppend` (iNum n)
+showNode (NInd addr) = (iStr "NInd ") `iAppend` (iStr $ show addr)
 
 showAddr :: Addr -> Iseq
 showAddr addr = iStr (show addr)
