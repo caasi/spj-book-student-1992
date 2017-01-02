@@ -14,9 +14,8 @@ type TiState = (TiStack, TiDump, TiHeap, TiGlobals, TiStats)
 
 type TiStack = [Addr]
 
-data TiDump = DummyTiDump
-  deriving (Show)
-initialTiDump = DummyTiDump
+type TiDump = [TiStack]
+initialTiDump = []
 
 type TiHeap = Heap Node
 
@@ -25,6 +24,10 @@ data Node
   | NSupercomb Name [Name] CoreExpr -- Supercombinator
   | NNum Int                        -- A number
   | NInd Addr                       -- Indirection
+  | NPrim Name Primitive            -- Primitive
+  deriving (Show)
+
+data Primitive = Neg | Add | Sub | Mul | Div
   deriving (Show)
 
 type TiGlobals = ASSOC Name Addr
@@ -88,13 +91,29 @@ compile program
       address_of_main = aLookup globals "main" (error "main is not defined")
 
 buildInitialHeap :: CoreProgram -> (TiHeap, TiGlobals)
-buildInitialHeap sc_defs = mapAccuml allocateSc hInitial sc_defs
+buildInitialHeap sc_defs
+  = (heap2, sc_addrs ++ prim_addrs)
+    where
+      (heap1, sc_addrs) = mapAccuml allocateSc hInitial sc_defs
+      (heap2, prim_addrs) = mapAccuml allocatePrim heap1 primitives
 
 allocateSc :: TiHeap -> CoreScDefn -> (TiHeap, (Name, Addr))
 allocateSc heap (name, args, body)
   = (heap', (name, addr))
     where
       (heap', addr) = hAlloc heap (NSupercomb name args body)
+
+primitives :: ASSOC Name Primitive
+primitives = [ ("negate", Neg)
+             , ("+", Add), ("-", Sub)
+             , ("*", Mul), ("/", Div)
+             ]
+
+allocatePrim :: TiHeap -> (Name, Primitive) -> (TiHeap, (Name, Addr))
+allocatePrim heap (name, prim)
+  = (heap', (name, addr))
+    where
+      (heap', addr) = hAlloc heap (NPrim name prim)
 
 
 
@@ -114,8 +133,8 @@ doAdmin state
       state'@(stack, dump, heap, glabals, stats) = applyToStats tiStatIncSteps state
 
 tiFinal :: TiState -> Bool
-tiFinal ([sole_addr], dump, heap, globals, stats) = isDataNode (hLookup heap sole_addr)
-tiFinal ([], dump, heap, globals, stats) = error "Empty stack!"
+tiFinal ([sole_addr], [], heap, globals, stats) = isDataNode (hLookup heap sole_addr)
+tiFinal ([], [], heap, globals, stats) = error "Empty stack!"
 tiFinal state = False
 
 isDataNode :: Node -> Bool
@@ -131,14 +150,24 @@ step state
       dispatch (NAp a1 a2)               = apStep state a1 a2
       dispatch (NSupercomb sc args body) = scStep state sc args body
       dispatch (NInd addr)               = scInd state addr
+      dispatch (NPrim name prim)         = primStep state prim
 
 numStep :: TiState -> Int -> TiState
-numStep state n = error "Number applied as a function!"
+numStep (stack, dump, heap, globals, stats) n
+  = if length dump /= 0
+      then (hd dump, tl dump, heap, globals, stats)
+      else error "Number applied as a function!"
 
 -- # tumbling down to the spine
 apStep :: TiState -> Addr -> Addr -> TiState
 apStep (stack, dump, heap, globals, stats) a1 a2
-  = (a1 : stack, dump, heap, globals, stats)
+  = case node of
+      (NInd a3) -> (stack, dump, new_heap, globals, stats)
+                   where
+                     new_heap = hUpdate heap (hd stack) (NAp a1 a3)
+      otherwise -> (a1 : stack, dump, heap, globals, stats)
+    where
+      node = hLookup heap a2
 
 scStep :: TiState -> Name -> [Name] -> CoreExpr -> TiState
 scStep (stack, dump, heap, globals, stats) sc_name arg_names body
@@ -159,6 +188,24 @@ scInd (stack, dump, heap, globals, stats) addr
   = (new_stack, dump, heap, globals, stats)
     where
       new_stack = addr : (tl stack)
+
+primStep :: TiState -> Primitive -> TiState
+primStep state Neg = primNeg state
+
+primNeg :: TiState -> TiState
+primNeg (stack@(s:ss), dump, heap, globals, stats)
+  = case (isDataNode node) of
+      True -> ([root_addr], dump, new_heap, globals, stats)
+              where
+                new_heap = hUpdate heap root_addr (NNum (negate n))
+                root_addr = hd ss
+                (NNum n) = node
+      False -> ([addr], ss:dump, heap, globals, stats)
+    where
+      node = hLookup heap addr
+      [addr] = getargs heap stack
+
+
 
 getargs :: TiHeap -> TiStack -> [Addr]
 getargs heap (sc : stack)
@@ -269,6 +316,7 @@ showNode (NAp a1 a2)
 showNode (NSupercomb name args body) = iStr ("NSupercomb " ++ name)
 showNode (NNum n) = (iStr "NNum ") `iAppend` (iNum n)
 showNode (NInd addr) = (iStr "NInd ") `iAppend` (iStr $ show addr)
+showNode (NPrim name prim) = iStr ("NPrim " ++ name)
 
 showAddr :: Addr -> Iseq
 showAddr addr = iStr (show addr)
