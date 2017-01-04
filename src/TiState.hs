@@ -191,19 +191,42 @@ scInd (stack, dump, heap, globals, stats) addr
 
 primStep :: TiState -> Primitive -> TiState
 primStep state Neg = primNeg state
+primStep state Add = primArith state (+)
+primStep state Sub = primArith state (-)
+primStep state Mul = primArith state (*)
+primStep state Div = primArith state (div)
 
 primNeg :: TiState -> TiState
 primNeg (stack@(s:ss), dump, heap, globals, stats)
   = case (isDataNode node) of
+      -- the result may be a indirection, so we have to step back instead of
+      -- passing the whole stack
+      False -> ([addr], ss:dump, heap, globals, stats)
       True -> ([root_addr], dump, new_heap, globals, stats)
               where
                 new_heap = hUpdate heap root_addr (NNum (negate n))
                 root_addr = hd ss
                 (NNum n) = node
-      False -> ([addr], ss:dump, heap, globals, stats)
     where
       node = hLookup heap addr
       [addr] = getargs heap stack
+
+primArith :: TiState -> (Int -> Int -> Int) -> TiState
+primArith (stack@(s1:s2:ss), dump, heap, globals, stats) f
+  = case (isDataNode node1) of
+      False -> ([addr1], (s2:ss):dump, heap, globals, stats)
+      True  -> case (isDataNode node2) of
+                 False -> ([addr2], ss:dump, heap, globals, stats)
+                 True  -> ([root_addr], dump, new_heap, globals, stats)
+                          where
+                            new_heap = hUpdate heap root_addr (NNum (f n1 n2))
+                            root_addr = hd ss
+                            (NNum n2) = node2
+                            (NNum n1) = node1
+    where
+      node2 = hLookup heap addr2
+      node1 = hLookup heap addr1
+      [addr1, addr2] = getargs heap stack
 
 
 
