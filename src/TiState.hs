@@ -25,9 +25,23 @@ data Node
   | NNum Int                        -- A number
   | NInd Addr                       -- Indirection
   | NPrim Name Primitive            -- Primitive
+  | NData Int [Addr]                -- Tag, list of components
   deriving (Show)
 
-data Primitive = Neg | Add | Sub | Mul | Div
+data Primitive
+  = Neg
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | PrimConstr Int Int
+  | If
+  | Greater
+  | GreaterEq
+  | Less
+  | LessEq
+  | Eq
+  | NotEq
   deriving (Show)
 
 type TiGlobals = ASSOC Name Addr
@@ -107,6 +121,13 @@ primitives :: ASSOC Name Primitive
 primitives = [ ("negate", Neg)
              , ("+", Add), ("-", Sub)
              , ("*", Mul), ("/", Div)
+             , ("if", If)
+             , (">", Greater)
+             , (">=", GreaterEq)
+             , ("<", Less)
+             , ("<=", LessEq)
+             , ("==", Eq)
+             , ("~=", NotEq)
              ]
 
 allocatePrim :: TiHeap -> (Name, Primitive) -> (TiHeap, (Name, Addr))
@@ -139,6 +160,7 @@ tiFinal state = False
 
 isDataNode :: Node -> Bool
 isDataNode (NNum n) = True
+isDataNode (NData tag addrs) = True
 isDataNode node     = False
 
 step :: TiState -> TiState
@@ -151,6 +173,7 @@ step state
       dispatch (NSupercomb sc args body) = scStep state sc args body
       dispatch (NInd addr)               = scInd state addr
       dispatch (NPrim name prim)         = primStep state prim
+      dispatch (NData tag addrs)         = dataStep state tag addrs
 
 numStep :: TiState -> Int -> TiState
 numStep (stack, dump, heap, globals, stats) n
@@ -195,6 +218,15 @@ primStep state Add = primArith state (+)
 primStep state Sub = primArith state (-)
 primStep state Mul = primArith state (*)
 primStep state Div = primArith state (div)
+-- for data constructors
+primStep state If = primIf state
+primStep state (PrimConstr tag arity) = primConstr state tag arity
+
+dataStep :: TiState -> Int -> [Addr] -> TiState
+dataStep (stack, dump, heap, globals, stats) tag addrs
+  = if length dump /= 0
+      then (hd dump, tl dump, heap, globals, stats)
+      else error "data constructor applied as a function!"
 
 primNeg :: TiState -> TiState
 primNeg (stack@(s:ss), dump, heap, globals, stats)
@@ -212,9 +244,9 @@ primNeg (stack@(s:ss), dump, heap, globals, stats)
       [addr] = getargs heap stack
 
 primArith :: TiState -> (Int -> Int -> Int) -> TiState
-primArith (stack@(s1:s2:ss), dump, heap, globals, stats) f
+primArith (stack@(_:s:ss), dump, heap, globals, stats) f
   = case (isDataNode node1) of
-      False -> ([addr1], (s2:ss):dump, heap, globals, stats)
+      False -> ([addr1], (s:ss):dump, heap, globals, stats)
       True  -> case (isDataNode node2) of
                  False -> ([addr2], ss:dump, heap, globals, stats)
                  True  -> ([root_addr], dump, new_heap, globals, stats)
@@ -227,6 +259,33 @@ primArith (stack@(s1:s2:ss), dump, heap, globals, stats) f
       node2 = hLookup heap addr2
       node1 = hLookup heap addr1
       [addr1, addr2] = getargs heap stack
+
+primIf :: TiState -> TiState
+primIf (stack@(_:_:ss), dump, heap, globals, stats)
+  = case (isDataNode node1) of
+      False -> ([addr1], ss:dump, heap, globals, stats)
+      True  -> ([root_addr], dump, new_heap, globals, stats)
+               where
+                 new_heap = case tag == 2 of
+                              True  -> hUpdate heap root_addr (NInd addr2)
+                              False -> hUpdate heap root_addr (NInd addr3)
+                 root_addr = hd ss
+                 (NData tag addrs) = node1
+    where
+      node3 = hLookup heap addr3
+      node2 = hLookup heap addr2
+      node1 = hLookup heap addr1
+      [addr1, addr2, addr3] = getargs heap stack
+
+primConstr :: TiState -> Int -> Int -> TiState
+primConstr (stack, dump, heap, globals, stats) tag arity
+  = ([addr], dump, new_heap, globals, stats)
+    where
+      new_heap = hUpdate heap addr (NData tag [])
+      addr = hd stack
+
+primDyadic :: TiState -> (Node -> Node -> Node) -> TiState
+primDyadic = undefined
 
 
 
@@ -252,7 +311,7 @@ instantiate (ELet isrec defs body) heap env
 instantiate (ECase e alts) heap env = error "Can't instantiate case exprs"
 
 instantiateConstr tag arity heap env
-  = error "Can't instantiate constructors yet"
+  = hAlloc heap (NPrim ("Pack{" ++ show tag ++ "," ++ show arity ++ "}") (PrimConstr tag arity))
 instantiateLet isrec defs body heap env
   = instantiate body new_heap new_env
     where
@@ -340,6 +399,7 @@ showNode (NSupercomb name args body) = iStr ("NSupercomb " ++ name)
 showNode (NNum n) = (iStr "NNum ") `iAppend` (iNum n)
 showNode (NInd addr) = (iStr "NInd ") `iAppend` (iStr $ show addr)
 showNode (NPrim name prim) = iStr ("NPrim " ++ name)
+showNode (NData tag addrs) = iStr ("Pack{" ++ show tag ++ "," ++ show (length addrs) ++ "}")
 
 showAddr :: Addr -> Iseq
 showAddr addr = iStr (show addr)
