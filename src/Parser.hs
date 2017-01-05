@@ -72,7 +72,7 @@ keywords :: [String]
 keywords
   = [ "let", "letrec"
     , "case", "in", "of"
-    , "Pack{", ",", "}"
+    , "Pack", "{", ",", "}"
     , "=", "->"
     , ";"
     , "&", "|", "+", "-", "*", "/"
@@ -128,6 +128,10 @@ pThen5 :: (a -> b -> c -> d -> e -> f)
        -> Parser a -> Parser b -> Parser c -> Parser d -> Parser e -> Parser f
 pThen5 combine p1 p2 p3 p4 p5 = combine `pFmap` p1 `pAp` p2 `pAp` p3 `pAp` p4 `pAp` p5
 
+pThen6 :: (a -> b -> c -> d -> e -> f -> g)
+       -> Parser a -> Parser b -> Parser c -> Parser d -> Parser e -> Parser f -> Parser g
+pThen6 combine p1 p2 p3 p4 p5 p6 = combine `pFmap` p1 `pAp` p2 `pAp` p3 `pAp` p4 `pAp` p5 `pAp` p6
+
 pEmpty :: a -> Parser a
 pEmpty a = \toks -> [(a, toks)]
 
@@ -160,9 +164,10 @@ pAexpr
     -- num
     ( ENum `pFmap` pNum ) `pAlt`
     -- Pack{num,num}
-    ( pThen5
-        (\_ tag _ as _ -> EConstr tag as)
-        (pLit "Pack{")
+    ( pThen6
+        (\_ _ tag _ as _ -> EConstr tag as)
+        (pLit "Pack")
+        (pLit "{")
         pNum
         (pLit ",")
         pNum
