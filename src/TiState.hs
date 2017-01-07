@@ -214,13 +214,19 @@ scInd (stack, dump, heap, globals, stats) addr
 
 primStep :: TiState -> Primitive -> TiState
 primStep state Neg = primNeg state
-primStep state Add = primArith state (+)
-primStep state Sub = primArith state (-)
-primStep state Mul = primArith state (*)
-primStep state Div = primArith state (div)
 -- for data constructors
 primStep state If = primIf state
 primStep state (PrimConstr tag arity) = primConstr state tag arity
+primStep state Add       = primDyadic state $ primArith (+)
+primStep state Sub       = primDyadic state $ primArith (-)
+primStep state Mul       = primDyadic state $ primArith (*)
+primStep state Div       = primDyadic state $ primArith (div)
+primStep state Greater   = primDyadic state $ primComp (>)
+primStep state GreaterEq = primDyadic state $ primComp (>=)
+primStep state Less      = primDyadic state $ primComp (<)
+primStep state LessEq    = primDyadic state $ primComp (<=)
+primStep state Eq        = primDyadic state $ primComp (==)
+primStep state NotEq     = primDyadic state $ primComp (/=)
 
 dataStep :: TiState -> Int -> [Addr] -> TiState
 dataStep (stack, dump, heap, globals, stats) tag addrs
@@ -243,25 +249,8 @@ primNeg (stack@(s:ss), dump, heap, globals, stats)
       node = hLookup heap addr
       [addr] = getargs heap stack
 
-primArith :: TiState -> (Int -> Int -> Int) -> TiState
-primArith (stack@(_:s:ss), dump, heap, globals, stats) f
-  = case (isDataNode node1) of
-      False -> ([addr1], (s:ss):dump, heap, globals, stats)
-      True  -> case (isDataNode node2) of
-                 False -> ([addr2], ss:dump, heap, globals, stats)
-                 True  -> ([root_addr], dump, new_heap, globals, stats)
-                          where
-                            new_heap = hUpdate heap root_addr (NNum (f n1 n2))
-                            root_addr = hd ss
-                            (NNum n2) = node2
-                            (NNum n1) = node1
-    where
-      node2 = hLookup heap addr2
-      node1 = hLookup heap addr1
-      [addr1, addr2] = getargs heap stack
-
 primIf :: TiState -> TiState
-primIf (stack@(_:_:ss), dump, heap, globals, stats)
+primIf (stack@(_:_:_:ss), dump, heap, globals, stats)
   = case (isDataNode node1) of
       False -> ([addr1], ss:dump, heap, globals, stats)
       True  -> ([root_addr], dump, new_heap, globals, stats)
@@ -285,7 +274,34 @@ primConstr (stack, dump, heap, globals, stats) tag arity
       addr = hd stack
 
 primDyadic :: TiState -> (Node -> Node -> Node) -> TiState
-primDyadic = undefined
+primDyadic (stack@(_:s:ss), dump, heap, globals, stats) comp
+  = case (isDataNode node1) of
+      False -> ([addr1], (s:ss):dump, heap, globals, stats)
+      True  -> case (isDataNode node2) of
+                 False -> ([addr2], ss:dump, heap, globals, stats)
+                 True  -> ([root_addr], dump, new_heap, globals, stats)
+                          where
+                            new_heap = hUpdate heap root_addr (comp node1 node2)
+                            root_addr = hd ss
+    where
+      node2 = hLookup heap addr2
+      node1 = hLookup heap addr1
+      [addr1, addr2] = getargs heap stack
+
+primArith :: (Int -> Int -> Int) -> Node -> Node -> Node
+primArith f (NNum a) (NNum b) = (NNum (f a b))
+primArith _ _ _ = error "A non-numerical data is compared to another node."
+
+primComp :: (Int -> Int -> Bool) -> Node -> Node -> Node
+primComp comp (NNum a) (NNum b) = boolToNData (comp a b)
+primComp comp (NData a _) (NData b _) = boolToNData (comp a b) -- buggy
+primComp comp (NNum _) (NData _ _) = error "A number is compared to a data constructor."
+primComp comp (NData _ _) (NNum _) = error "A data constructor is compared to a number."
+primComp _ _ _ = error "A non-data node is compared to another node."
+
+boolToNData :: Bool -> Node
+boolToNData True  = NData 2 []
+boolToNData False = NData 1 []
 
 
 
@@ -335,7 +351,7 @@ instantiateAndUpdate (EVar v) upd_addr heap env
     where
       addr = aLookup env v (error ("Undefined name " ++ show v))
 instantiateAndUpdate (EConstr tag arity) upd_addr heap env
-  = error "Can't instantiate contructors yet"
+  = hUpdate heap upd_addr (NPrim ("Pack{" ++ show tag ++ "," ++ show arity ++ "}") (PrimConstr tag arity))
 instantiateAndUpdate (ELet isrec defs body) upd_addr heap env
   = hUpdate new_heap' upd_addr (NInd addr)
     where
