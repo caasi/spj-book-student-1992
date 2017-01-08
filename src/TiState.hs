@@ -1,5 +1,6 @@
 module TiState where
 
+import Debug.Trace
 import Language
 import PrettyPrint
 import Parser
@@ -35,6 +36,7 @@ data Primitive
   | Mul
   | Div
   | PrimConstr Int Int
+  | PrimCasePair
   | If
   | Greater
   | GreaterEq
@@ -128,6 +130,7 @@ primitives = [ ("negate", Neg)
              , ("<=", LessEq)
              , ("==", Eq)
              , ("~=", NotEq)
+             , ("casePair", PrimCasePair)
              ]
 
 allocatePrim :: TiHeap -> (Name, Primitive) -> (TiHeap, (Name, Addr))
@@ -216,6 +219,7 @@ primStep :: TiState -> Primitive -> TiState
 primStep state Neg = primNeg state
 -- for data constructors
 primStep state If = primIf state
+primStep state PrimCasePair = primCasePair state
 primStep state (PrimConstr tag arity) = primConstr state tag arity
 primStep state Add       = primDyadic state $ primArith (+)
 primStep state Sub       = primDyadic state $ primArith (-)
@@ -235,12 +239,12 @@ dataStep (stack, dump, heap, globals, stats) tag addrs
       else error "data constructor applied as a function!"
 
 primNeg :: TiState -> TiState
-primNeg (stack@(s:ss), dump, heap, globals, stats)
+primNeg (stack@(_:ss), dump, heap, globals, stats)
   = case (isDataNode node) of
       -- the result may be a indirection, so we have to step back instead of
       -- passing the whole stack
       False -> ([addr], ss:dump, heap, globals, stats)
-      True -> ([root_addr], dump, new_heap, globals, stats)
+      True -> (ss, dump, new_heap, globals, stats)
               where
                 new_heap = hUpdate heap root_addr (NNum (negate n))
                 root_addr = hd ss
@@ -253,7 +257,7 @@ primIf :: TiState -> TiState
 primIf (stack@(_:_:_:ss), dump, heap, globals, stats)
   = case (isDataNode node1) of
       False -> ([addr1], ss:dump, heap, globals, stats)
-      True  -> ([root_addr], dump, new_heap, globals, stats)
+      True  -> (ss, dump, new_heap, globals, stats)
                where
                  new_heap = case tag == 2 of
                               True  -> hUpdate heap root_addr (NInd addr2)
@@ -268,10 +272,29 @@ primIf (stack@(_:_:_:ss), dump, heap, globals, stats)
 
 primConstr :: TiState -> Int -> Int -> TiState
 primConstr (stack, dump, heap, globals, stats) tag arity
-  = ([addr], dump, new_heap, globals, stats)
+  = (new_stack, dump, new_heap, globals, stats)
     where
-      new_heap = hUpdate heap addr (NData tag [])
-      addr = hd stack
+      new_heap = hUpdate heap addr (NData tag (take arity addrs))
+      new_stack@(addr:_) = drop arity stack
+      addrs = getargs heap stack
+
+primCasePair :: TiState -> TiState
+primCasePair (stack@(_:s:ss), dump, heap, globals, stats)
+  = case (isDataNode node1) of
+      False -> ([addr1], (s:ss):dump, heap, globals, stats)
+      True  -> (ss, dump, new_heap', globals, stats)
+               where
+                 new_heap' = hUpdate new_heap root_addr (NInd addr)
+                 root_addr = hd ss
+                 (new_heap, addr) = nodeApply (heap, addr2) addrs
+                 (NData tag addrs) = node1
+    where
+      node1 = hLookup heap addr1
+      [addr1, addr2] = getargs heap stack
+
+nodeApply :: (TiHeap, Addr) -> [Addr] -> (TiHeap, Addr)
+nodeApply (heap, f) [] = (heap, f)
+nodeApply (heap, f) (a:as) = nodeApply (hAlloc heap (NAp f a)) as
 
 primDyadic :: TiState -> (Node -> Node -> Node) -> TiState
 primDyadic (stack@(_:s:ss), dump, heap, globals, stats) comp
@@ -415,7 +438,14 @@ showNode (NSupercomb name args body) = iStr ("NSupercomb " ++ name)
 showNode (NNum n) = (iStr "NNum ") `iAppend` (iNum n)
 showNode (NInd addr) = (iStr "NInd ") `iAppend` (iStr $ show addr)
 showNode (NPrim name prim) = iStr ("NPrim " ++ name)
-showNode (NData tag addrs) = iStr ("Pack{" ++ show tag ++ "," ++ show (length addrs) ++ "}")
+showNode (NData tag addrs)
+  = iConcat
+      [ iStr "Pack{"
+      , iStr $ show tag
+      , iStr ","
+      , iStr $ show (length addrs)
+      , iStr "}"
+      ]
 
 showAddr :: Addr -> Iseq
 showAddr addr = iStr (show addr)
