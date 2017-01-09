@@ -38,7 +38,7 @@ clex lineNum (c : cs)
   = (lineNum, [c]) : clex lineNum cs
 
 isIdChar :: Char -> Bool
-isIdChar c = isAlpha c || isDigit c || (c == '_')
+isIdChar c = isAlpha c || isDigit c || (c == '_') || (c == '\'')
 
 isWhiteSpace :: Char -> Bool
 isWhiteSpace c = c `elem` " \t"
@@ -103,7 +103,7 @@ pLit :: String -> Parser String
 pLit s = pSat (== s)
 
 pVar :: Parser Name
-pVar = pSat (\s@(c:ss) -> s `notElem` keywords && isAlpha c && (and . map isAlphaNum) ss)
+pVar = pSat (\s@(c:ss) -> s `notElem` keywords && isAlpha c && (and . map isIdChar) ss)
 
 pNum :: Parser Int
 pNum = read `pFmap` (pSat (and . map isDigit))

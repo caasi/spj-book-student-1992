@@ -17,6 +17,12 @@ extraPreludeDefns
     , ("MkPair", ["a", "b"], EAp (EAp (EConstr 1 2) (EVar "a")) (EVar "b"))
     , ("fst", ["p"], EAp (EAp (EVar "casePair") (EVar "p")) (EVar "K"))
     , ("snd", ["p"], EAp (EAp (EVar "casePair") (EVar "p")) (EVar "K1"))
+    , ("Nil", [], EConstr 1 0)
+    , ("Cons", ["x", "xs"], EAp (EAp (EConstr 2 2) (EVar "x")) (EVar "xs"))
+    -- head xs = caseList xs abort K
+    , ("head", ["xs"], EAp (EAp (EAp (EVar "caseList") (EVar "xs")) (EVar "abort")) (EVar "K"))
+    -- tail xs = caseList xs abort K1
+    , ("tail", ["xs"], EAp (EAp (EAp (EVar "caseList") (EVar "xs")) (EVar "abort")) (EVar "K1"))
     ]
 
 type TiState = (TiStack, TiDump, TiHeap, TiGlobals, TiStats)
@@ -45,6 +51,7 @@ data Primitive
   | Div
   | PrimConstr Int Int
   | PrimCasePair
+  | PrimCaseList
   | If
   | Greater
   | GreaterEq
@@ -52,6 +59,7 @@ data Primitive
   | LessEq
   | Eq
   | NotEq
+  | Abort
   deriving (Show)
 
 type TiGlobals = ASSOC Name Addr
@@ -139,6 +147,8 @@ primitives = [ ("negate", Neg)
              , ("==", Eq)
              , ("~=", NotEq)
              , ("casePair", PrimCasePair)
+             , ("caseList", PrimCaseList)
+             , ("abort", Abort)
              ]
 
 allocatePrim :: TiHeap -> (Name, Primitive) -> (TiHeap, (Name, Addr))
@@ -228,7 +238,9 @@ primStep state Neg = primNeg state
 -- for data constructors
 primStep state If = primIf state
 primStep state PrimCasePair = primCasePair state
+primStep state PrimCaseList = primCaseList state
 primStep state (PrimConstr tag arity) = primConstr state tag arity
+primStep state Abort = primAbort state
 primStep state Add       = primDyadic state $ primArith (+)
 primStep state Sub       = primDyadic state $ primArith (-)
 primStep state Mul       = primDyadic state $ primArith (*)
@@ -304,6 +316,28 @@ nodeApply :: (TiHeap, Addr) -> [Addr] -> (TiHeap, Addr)
 nodeApply (heap, f) [] = (heap, f)
 nodeApply (heap, f) (a:as) = nodeApply (hAlloc heap (NAp f a)) as
 
+primCaseList :: TiState -> TiState
+primCaseList (stack@(_:s1:s2:ss), dump, heap, globals, stats)
+  = case (isDataNode node1) of
+      False -> ([addr1], (s1:s2:ss):dump, heap, globals, stats)
+      True  -> case tag of
+                 -- Nil
+                 1 -> (ss, dump, new_heap, globals, stats)
+                      where
+                        new_heap = hUpdate heap root_addr (NInd addr2)
+                 -- Cons x xs
+                 2 -> (ss, dump, new_heap', globals, stats)
+                      where
+                        new_heap' = hUpdate new_heap root_addr (NInd addr)
+                        -- addr3 should point to a supercombinator for now :(
+                        (new_heap, addr) = nodeApply (heap, addr3) addrs
+               where
+                 root_addr = hd ss
+                 (NData tag addrs) = node1
+    where
+      node1 = hLookup heap addr1
+      [addr1, addr2, addr3] = getargs heap stack
+
 primDyadic :: TiState -> (Node -> Node -> Node) -> TiState
 primDyadic (stack@(_:s:ss), dump, heap, globals, stats) comp
   = case (isDataNode node1) of
@@ -333,6 +367,10 @@ primComp _ _ _ = error "A non-data node is compared to another node."
 boolToNData :: Bool -> Node
 boolToNData True  = NData 2 []
 boolToNData False = NData 1 []
+
+primAbort :: TiState -> TiState
+primAbort (stack, dump, heap, globals, stats)
+  = error "Abort!"
 
 
 

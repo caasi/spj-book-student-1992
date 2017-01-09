@@ -1,0 +1,4 @@
+length xs = caseList xs 0 length' ;
+length' x xs = 1 + length xs ;
+last xs = if (length xs == 1) (head xs) (last (tail xs)) ;
+main = last (Cons 1 (Cons 1 (Cons 2 (Cons 3 Nil))))
