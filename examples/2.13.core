@@ -1,2 +1,2 @@
 id x = x ;
-main = twice twice id 3
+main = Cons (twice twice id 3) Nil

@@ -6,4 +6,4 @@ f x y = letrec
             b = pair y a
         in
         fst (snd (snd (snd a))) ;
-main = f 3 4
+main = Cons (f 3 4) Nil

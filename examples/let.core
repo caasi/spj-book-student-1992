@@ -1,4 +1,6 @@
 main =
-  let drei = 3 in
-    let three = drei in
-      K drei three
+  Cons (
+    let drei = 3 in
+      let three = drei in
+        K drei three
+  ) Nil

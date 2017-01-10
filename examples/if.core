@@ -1,1 +1,1 @@
-main = if Pack{2,0} 1 0
+main = Cons (if Pack{2,0} 1 0) Nil

@@ -3,4 +3,4 @@ main =
     drei = three;
     three = 3
   in
-    K drei three
+    Cons (K drei three) Nil

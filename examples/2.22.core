@@ -1,1 +1,1 @@
-main = fst (snd (fst (MkPair (MkPair 1 (MkPair 2 3)) 4)))
+main = Cons (fst (snd (fst (MkPair (MkPair 1 (MkPair 2 3)) 4)))) Nil

@@ -1,1 +1,1 @@
-main = head Nil
+main = Cons (head Nil) Nil

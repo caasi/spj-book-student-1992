@@ -1,1 +1,1 @@
-main = negate 3
+main = Cons (negate 3) Nil
