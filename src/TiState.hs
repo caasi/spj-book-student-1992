@@ -176,8 +176,9 @@ eval state = state : rest_states
 
 doAdmin :: TiState -> TiState
 doAdmin state
-  = state''
+  = state'''
     where
+      state''' = if (length stack > 40) then (gc state'') else state''
       state'' = applyToStats (tiStatSetMaxDepth (length stack)) state'
       state'@(output, stack, dump, heap, glabals, stats) = applyToStats tiStatIncSteps state
 
@@ -578,4 +579,36 @@ showOutput (output, stack, dump, heap, globals, stats)
     , iStr "]"
     , iNewline
     ]
+
+
+
+-- Mark-scan collection
+gc :: TiState -> TiState
+gc state@(output, stack, dump, heap, globals, stats)
+  = (output, stack, dump, new_heap, globals, stats)
+    where
+      (new_heap, _) = mapAccuml (\h a -> (markFrom h a, a)) heap addrs
+      addrs = (findStackRoots state) ++ (findDumpRoots state) ++ (findGlobalRoots state)
+
+findStackRoots :: TiState -> [Addr]
+findStackRoots (output, stack, dump, heap, globals, stats)
+  = stack
+
+findDumpRoots :: TiState -> [Addr]
+findDumpRoots (output, stack, dump, heap, globals, stats)
+  = concat dump
+
+findGlobalRoots :: TiState -> [Addr]
+findGlobalRoots (output, stack, dump, heap, globals, stats)
+  = aRange globals
+
+markFrom :: TiHeap -> Addr -> TiHeap
+markFrom = undefined
+
+scanHeap :: TiHeap -> TiHeap
+scanHeap = undefined
+
+
+
+-- Two-space garbage collection
 
