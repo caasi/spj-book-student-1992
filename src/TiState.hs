@@ -44,6 +44,7 @@ data Node
   | NInd Addr                       -- Indirection
   | NPrim Name Primitive            -- Primitive
   | NData Int [Addr]                -- Tag, list of components
+  | NMarked Node                    -- Marked node
   deriving (Show)
 
 data Primitive
@@ -175,10 +176,10 @@ eval state = state : rest_states
          next_states = doAdmin (step state)
 
 doAdmin :: TiState -> TiState
-doAdmin state
+doAdmin state@(output, stack, dump, heap, globals, stats)
   = state'''
     where
-      state''' = if (length stack > 40) then (gc state'') else state''
+      state''' = if (hSize heap > 20) then (gc state'') else state''
       state'' = applyToStats (tiStatSetMaxDepth (length stack)) state'
       state'@(output, stack, dump, heap, glabals, stats) = applyToStats tiStatIncSteps state
 
@@ -585,9 +586,10 @@ showOutput (output, stack, dump, heap, globals, stats)
 -- Mark-scan collection
 gc :: TiState -> TiState
 gc state@(output, stack, dump, heap, globals, stats)
-  = (output, stack, dump, new_heap, globals, stats)
+  = (output, stack, dump, heap'', globals, stats)
     where
-      (new_heap, _) = mapAccuml (\h a -> (markFrom h a, a)) heap addrs
+      heap'' = scanHeap heap'
+      (heap', _) = mapAccuml (\h a -> (markFrom h a, a)) heap addrs
       addrs = (findStackRoots state) ++ (findDumpRoots state) ++ (findGlobalRoots state)
 
 findStackRoots :: TiState -> [Addr]
@@ -603,10 +605,36 @@ findGlobalRoots (output, stack, dump, heap, globals, stats)
   = aRange globals
 
 markFrom :: TiHeap -> Addr -> TiHeap
-markFrom = undefined
+markFrom heap addr
+  = case node of
+      NAp addr1 addr2 -> hUpdate heap'' addr (NMarked node)
+                         where
+                           heap'' = markFrom heap addr2
+                           heap' = markFrom heap addr1
+      NInd addr1      -> hUpdate heap' addr (NMarked node')
+                         where
+                           heap' = markFrom heap addr1
+                           node' = hLookup heap addr1
+      NData _ addrs   -> hUpdate heap' addr (NMarked node)
+                         where
+                           (heap', _) = mapAccuml (\h a -> (markFrom h a, a)) heap addrs
+      NMarked _       -> heap
+      _               -> hUpdate heap addr (NMarked node)
+    where
+      node = hLookup heap addr
 
 scanHeap :: TiHeap -> TiHeap
-scanHeap = undefined
+scanHeap heap
+  = go heap addrs
+    where
+      go heap []     = heap
+      go heap (a:as) = case node of
+                         NMarked node' -> go (hUpdate heap a node') as
+                         _             -> go (hFree heap a) as
+                         --_             -> go heap (trace (show a) as)
+                       where
+                         node = hLookup heap a
+      addrs = hAddresses heap
 
 
 
