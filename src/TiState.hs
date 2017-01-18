@@ -179,7 +179,7 @@ doAdmin :: TiState -> TiState
 doAdmin state@(output, stack, dump, heap, globals, stats)
   = state'''
     where
-      state''' = if (hSize heap > 20) then (gc state'') else state''
+      state''' = if (hSize heap > 50) then (gc state'') else state''
       state'' = applyToStats (tiStatSetMaxDepth (length stack)) state'
       state'@(output, stack, dump, heap, glabals, stats) = applyToStats tiStatIncSteps state
 
@@ -609,11 +609,14 @@ markFrom heap addr
   = case node of
       NAp addr1 addr2 -> hUpdate heap'' addr (NMarked node)
                          where
-                           heap'' = markFrom heap addr2
+                           heap'' = markFrom heap' addr2
                            heap' = markFrom heap addr1
-      NInd addr1      -> hUpdate heap' addr (NMarked node')
+      NInd addr1      -> hUpdate heap' addr node''
                          where
                            heap' = markFrom heap addr1
+                           node'' = case node' of
+                                      (NMarked _) -> node'
+                                      _           -> (NMarked node')
                            node' = hLookup heap addr1
       NData _ addrs   -> hUpdate heap' addr (NMarked node)
                          where
@@ -631,7 +634,7 @@ scanHeap heap
       go heap (a:as) = case node of
                          NMarked node' -> go (hUpdate heap a node') as
                          _             -> go (hFree heap a) as
-                         --_             -> go heap (trace (show a) as)
+                         --_             -> go heap as -- do nothing
                        where
                          node = hLookup heap a
       addrs = hAddresses heap
