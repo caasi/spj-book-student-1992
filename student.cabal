@@ -20,6 +20,9 @@ library
                      , PrettyPrint
                      , Parser
                      , MultState
+                     , TiTypes
+                     , GCMarkScan
+                     , GCTwoSpace
                      , TiState
   build-depends:       base >= 4.7 && < 5
   default-language:    Haskell2010
