@@ -47,6 +47,7 @@ evacuateAddrs
 evacuate :: TiHeap -> TiHeap -> Addr -> (TiHeap, TiHeap, Addr)
 evacuate fromheap toheap addr
   = case node of
+      NForward addr1  -> (fromheap, toheap, addr1)
       NAp addr1 addr2 -> (fromheap'', toheap'', toaddr)
                          where
                            (fromheap'', toheap'', _) = evacuateAddrs fromheap' toheap' [addr1, addr2]
@@ -72,18 +73,19 @@ scavengeHeap fromheap toheap
 scavengeAddr :: TiHeap -> TiHeap -> Addr -> (TiHeap, Addr)
 scavengeAddr fromheap toheap addr
   = case node of
-      NAp addr1 addr2 -> (hUpdate toheap addr (NAp addr1 addr2), addr)
+      NAp addr1 addr2 -> (hUpdate toheap addr (NAp addr1' addr2'), addr)
                          where
-                           (NForward addr2') = hLookup fromheap addr2
-                           (NForward addr1') = hLookup fromheap addr1
+                           addr2' = toNewAddr fromheap addr2
+                           addr1' = toNewAddr fromheap addr1
       -- how can I remove the indirection node here?
       NInd addr1      -> (hUpdate toheap addr (NInd addr1'), addr)
                          where
-                           (NForward addr1') = hLookup fromheap addr1
+                           addr1' = toNewAddr fromheap addr1
       NData tag addrs -> (hUpdate toheap addr (NData tag addrs'), addr)
                          where
-                           addrs' = map (\(NForward addr) -> addr) (map (hLookup fromheap) addrs)
+                           addrs' = map (toNewAddr fromheap) addrs
       _               -> (toheap, addr)
     where
+      toNewAddr heap = (\(NForward addr) -> addr) . (hLookup heap)
       node = hLookup toheap addr
 
